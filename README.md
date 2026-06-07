@@ -212,7 +212,7 @@ Weekly cron (Monday 06:00 UTC) triggers the full tournament automatically.
 | # | Project | Repo | Status |
 |---|---|---|---|
 | **1** | **Multi-Model Tournament Pipeline** | [mlops-model-tournament](https://github.com/jumma786/mlops-model-tournament) | ✅ This repo |
-| 2 | Scheduled Retraining + DVC + MLflow | mlops-retraining-pipeline | 🔜 |
+| 2 | Scheduled Retraining + DVC + MLflow | [mlops-retraining-pipeline](https://github.com/jumma786/mlops-retraining-pipeline) | ✅ |
 | 3 | Feature Engineering as Versioned Artifact | mlops-feature-pipeline | 🔜 |
 | 4 | Hyperparameter Tuning with Optuna + MLflow | mlops-hyperparameter-tuning | 🔜 |
 | 5 | FastAPI + Docker + Cloud Run Deployment | mlops-model-serving | 🔜 |
