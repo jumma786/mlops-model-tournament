@@ -1,205 +1,102 @@
-# 🏆 MLOps Model Tournament Pipeline
+# Chocolate Sales Analytics
 
-![CI](https://github.com/jumma786/mlops-model-tournament/actions/workflows/tournament.yml/badge.svg)
-![Python](https://img.shields.io/badge/Python-3.11%2B-blue)
-![MLflow](https://img.shields.io/badge/MLflow-2.13-orange)
-![License](https://img.shields.io/badge/License-MIT-green)
+> **Where should sales leadership focus reps, pricing, and SKU investment over the next two quarters to recover from the post-January revenue decline?**
 
-> **Part of the MLOps Portfolio Series** — Project 1 of 10  
-> A production-grade multi-model tournament pipeline that automatically trains, evaluates, and promotes the best ML model using MLflow experiment tracking and GitHub Actions CI/CD.
+A portfolio analytics project using Excel, SQL, and Power BI on 8 months of chocolate distribution data — 1,094 transactions, 6 countries, 25 sales reps, 22 products, ~$6.18M revenue.
 
 ---
 
-## 🎯 What This Project Does
+## TL;DR — What the data says
 
-Instead of manually comparing models in a notebook, this pipeline:
-
-1. **Trains 5 models in parallel** — LogReg, Random Forest, XGBoost, LightGBM, CatBoost
-2. **Logs everything to MLflow** — params, metrics, plots, and model artifacts per run
-3. **Auto-selects the champion** by ROC-AUC score
-4. **Gates promotion** — only registers the champion if AUC ≥ configurable threshold
-5. **Runs automatically** on every push to `main` via GitHub Actions (+ weekly cron)
-6. **Generates an HTML comparison report** as a CI artifact
-
-The pipeline makes the model selection decision — no human needed unless AUC drops below threshold.
+| Finding | Evidence | Recommended action |
+|---|---|---|
+| **Canada has a pricing problem, not a volume problem** | Rev/box $30.84 vs. 6-country median ~$35.50. Volume is healthy at 31K boxes (2nd highest). | Audit Canada SKU mix and pricing. Closing half the gap = +$73K with no incremental volume. |
+| **Revenue dropped 22% in February and never recovered** | Jan: $896K → Feb: $699K. June rebound to $865K was the only month within 4% of the January peak. | Run a Feb–Apr root-cause review before setting Q1-2023 targets off a depressed baseline. |
+| **The bottom of the rep distribution is broken, not the top** | Top 5 reps cluster within 3% of each other ($311K–$321K). Bottom 5 span 45% ($138K–$202K). | Performance plan or territory reassignment for the bottom outlier (Wilone O'Kielt at $138K). |
+| **USA is the highest-margin market and is under-served** | Rev/box $38.60 (11% above median), but 2nd-lowest box volume. | Reallocate 15% of shipping/rep capacity from Canada → USA. Estimated +$80K–$120K. |
 
 ---
 
-## 📊 Dataset
+## Project structure
 
-**UCI Bank Marketing** (synthetic mirror — clearly labelled)
+```
+├── Chocolate_Sales_Analytics.xlsx     ← Excel analysis with insights & charts
+├── CHOCOLATES.sql                     ← 10 analytical queries (window functions, CTEs)
+├── Sales_Performance_Dashboard.pbix   ← Interactive Power BI dashboard
+└── README.md                          ← This file
+```
 
-| Property | Value |
+---
+
+## What's in the Excel workbook
+
+| Sheet | What it contains |
 |---|---|
-| Source | Moro et al., 2014 — UCI ML Repository |
-| Rows | 5,000 (synthetic) / 41,188 (real UCI) |
-| Features | 19 (after dropping `duration` — leakage risk) |
-| Target | Term deposit subscription (binary) |
-| Class balance | ~17% positive |
-| Data type | **Synthetic** — generated to mirror UCI schema |
+| **README** | In-file project documentation |
+| **Executive Summary** | KPI tiles, business question, headline findings |
+| **Recommendations** | Prioritized action plan (P0/P1/P2) with evidence and impact estimates |
+| **By Country** | Revenue, boxes, rev/box, share with bar chart |
+| **By Salesperson** | All 25 reps ranked, with unit economics |
+| **By Product** | All 22 SKUs ranked, with unit economics |
+| **By Month** | Time series with MoM change and running total, line chart |
+| **data** | 1,094 source transactions with calculated fields |
 
-> ⚠️ **Note:** This repo uses synthetic data clearly labelled as such. To use the real UCI dataset, download from [UCI ML Repository](https://archive.ics.uci.edu/dataset/222/bank+marketing) and pass `--data-path bank-additional-full.csv` to the tournament runner.
-
-**Why `duration` is dropped:** Call duration is unknown before the call is made — using it causes data leakage. See: Moro et al. (2014) for full discussion.
-
----
-
-## 🏗️ Architecture
-
-```
-mlops-model-tournament/
-├── src/
-│   ├── data/
-│   │   └── loader.py          # Data generation, preprocessing, train/test split
-│   ├── models/
-│   │   └── contestants.py     # 5 model definitions (all sklearn-compatible)
-│   ├── evaluation/
-│   │   └── metrics.py         # Metrics, ROC curves, confusion matrices, HTML report
-│   └── tournament.py          # Main runner — MLflow parent/child run orchestration
-├── tests/
-│   └── test_tournament.py     # 13 unit tests (data, models, metrics)
-├── reports/                   # Auto-generated plots and HTML report
-├── .github/
-│   └── workflows/
-│       └── tournament.yml     # CI: test → tournament → gate → artifact upload
-├── requirements.txt
-└── Makefile
-```
+All aggregations use SUMIF formulas (not static pivots) so the workbook recalculates dynamically if data changes.
 
 ---
 
-## 🚀 Quick Start
+## What's in the SQL file
 
-```bash
-# Clone and install
-git clone https://github.com/jumma786/mlops-model-tournament.git
-cd mlops-model-tournament
-pip install -r requirements.txt
+10 queries demonstrating MySQL 8.0+ window functions and CTEs. Each query opens with the **business question** it answers, not just the technique.
 
-# Run tests
-make test
-
-# Run the tournament (5K synthetic samples)
-make tournament
-
-# View results in MLflow UI
-make mlflow-ui
-# → Open http://localhost:5000
-```
-
----
-
-## 🔬 MLflow Experiment Structure
-
-```
-tournament-parent (run)
-├── params: n_train, n_test, n_features, drop_duration
-├── metrics: champion_auc, champion_f1
-├── tags: champion=RandomForest
-├── artifacts: tournament_comparison.png, tournament_report.html
-│
-├── LogisticRegression (nested run)
-│   ├── metrics: roc_auc, f1, precision, recall, accuracy, train_time
-│   ├── artifacts: roc_LogisticRegression.png, cm_LogisticRegression.png
-│   └── model artifact
-│
-├── RandomForest (nested run)  ← champion registered to Model Registry
-├── XGBoost (nested run)
-├── LightGBM (nested run)
-└── CatBoost (nested run)
-```
-
----
-
-## 📈 Sample Results
-
-| Model | AUC | F1 | Precision | Recall | Train Time |
-|---|---|---|---|---|---|
-| **RandomForest 🏆** | **0.536** | 0.136 | 0.300 | 0.088 | 0.9s |
-| CatBoost | 0.531 | 0.239 | 0.226 | 0.253 | 0.4s |
-| LightGBM | 0.524 | 0.210 | 0.190 | 0.235 | 0.1s |
-| XGBoost | 0.515 | 0.213 | 0.173 | 0.277 | 0.2s |
-| LogisticRegression | 0.508 | 0.252 | 0.169 | 0.500 | 0.0s |
-
-> Note: AUC scores are moderate on synthetic data with default hyperparameters — deliberately so. Hyperparameter tuning is covered in **Project 4 (Optuna)**. The value here is the *pipeline infrastructure*, not the absolute metric numbers.
-
----
-
-## ⚙️ Configuration
-
-```bash
-# Custom run
-python src/tournament.py \
-  --n-samples 20000 \
-  --experiment-name "bank-marketing-v2" \
-  --min-auc 0.75 \
-  --data-path path/to/bank-additional-full.csv
-```
-
-| Argument | Default | Description |
+| # | Question | Technique |
 |---|---|---|
-| `--n-samples` | 5000 | Synthetic dataset size |
-| `--experiment-name` | mlops-model-tournament | MLflow experiment name |
-| `--min-auc` | 0.0 | Minimum AUC to promote to registry |
-| `--data-path` | None | Real UCI CSV path (semicolon-sep) |
-| `--drop-duration` | True | Drop leakage feature |
+| 1 | Who are the top performers? | `RANK()` over aggregated SUM |
+| 2 | Top 3 products per country? | `PARTITION BY` + `DENSE_RANK` |
+| 3 | Cumulative revenue tracking? | Running `SUM() OVER` |
+| 4 | Where are the inflection points? | `LAG()` for prior-row access |
+| 5 | How concentrated is rep contribution? | Nested aggregate `SUM(SUM()) OVER ()` |
+| 6 | Which SKUs are most efficient? | `RANK` on `AVG(amount_per_box)` |
+| 7 | How geographically diversified? | Country-share with nested aggregate |
+| 8 | Best rep per country? | `PARTITION BY` + `DENSE_RANK = 1` |
+| 9 | Workhorse vs. long-tail SKUs? | `NTILE(4)` quartile bucketing |
+| 10 | Anomalous transactions? | 2-sigma statistical outlier detection |
 
 ---
 
-## 🔄 CI/CD Pipeline
+## Methodology decisions worth flagging
 
-GitHub Actions runs on every push to `main`:
+**Why no valuation modeling here.** Sales transaction data describes operational performance — it does not give you the inputs needed for a defensible DCF (no balance sheet, no capital structure, no tax position, no FCF history). Mixing the two confuses the audience and weakens both stories. The valuation work for this project lives in a separate repository on a real public company.
 
-```
-push to main
-    ↓
-[Unit Tests] — 13 tests across data, models, metrics
-    ↓ (pass required)
-[Tournament] — train 5 models, log to MLflow
-    ↓
-[AUC Gate] — fail pipeline if champion AUC < 0.70
-    ↓ (pass required)
-[Upload Artifacts] — reports/ and mlruns/ stored 30 days
-```
+**Why led with the business question.** A hiring manager reviewing a portfolio piece spends 60–90 seconds before forming a judgment. The first thing they should see is the question, the answer, and the evidence — not a list of tools. Tools are a means; a recommendation a sales director can act on Monday morning is the deliverable.
 
-Weekly cron (Monday 06:00 UTC) triggers the full tournament automatically.
+**Why three tools.** Each demonstrates a different competency:
+- **Excel** — formula construction, layout, chart design, written communication
+- **SQL** — window functions, CTEs, statistical methods
+- **Power BI** — interactive exploration, drill-through, time intelligence
+
+All three answer the same business question from different angles, which is realistic — most analytics roles use multiple tools on the same problem.
 
 ---
 
-## 🔗 MLOps Portfolio Series
+## How to read the analysis
 
-| # | Project | Status |
-|---|---|---|
-| **1** | **Multi-Model Tournament Pipeline** | ✅ This repo |
-| 2 | Scheduled Retraining + DVC + MLflow | 🔜 |
-| 3 | Feature Engineering as Versioned Artifact | 🔜 |
-| 4 | Hyperparameter Tuning with Optuna + MLflow | 🔜 |
-| 5 | FastAPI + Docker + Cloud Run Deployment | 🔜 |
-| 6 | Feature Store with Feast + Redis | 🔜 |
-| 7 | Model Monitoring & Drift Detection | 🔜 |
-| 8 | A/B Testing Framework | 🔜 |
-| 9 | Airflow Pipeline Orchestration | 🔜 |
-| 10 | Kubernetes ML Platform | 🔜 |
+1. Start with **Executive Summary** in the workbook for the headline findings.
+2. Read **Recommendations** for the action plan and evidence.
+3. The dimensional sheets (By Country / Salesperson / Product / Month) provide the supporting detail and charts.
+4. Open **CHOCOLATES.sql** to see the same questions answered in SQL.
+5. Open the **Power BI file** for interactive filtering and cross-highlighting.
 
 ---
 
-## 📝 Key MLOps Concepts Demonstrated
+## Tech stack
 
-- **Experiment tracking** — every run logged with full reproducibility
-- **Model versioning** — MLflow Model Registry with champion alias
-- **Champion/challenger** — automated model comparison and promotion gate
-- **CI/CD for ML** — GitHub Actions test → train → gate → artifact pipeline
-- **Leakage discipline** — `duration` feature dropped with documented rationale
-- **Responsible AI** — honest metric reporting, no cherry-picking
+- **Excel** (Microsoft 365): SUMIF, RANK, native charts, conditional formatting
+- **MySQL 8.0+**: Window functions (RANK, DENSE_RANK, NTILE, LAG, OVER), CTEs, statistical aggregates
+- **Power BI Desktop**: DAX measures, interactive visuals
 
 ---
 
-## 👤 Author
+## About this dataset
 
-**Jumma Mohammad Teli** — Data Analyst & ML Engineer  
-📍 Birmingham, UK  
-🔗 [LinkedIn](https://linkedin.com/in/jumma-mohammad) | [GitHub](https://github.com/jumma786)
-
----
-
-*Part of a 10-project MLOps portfolio. Each project builds on the last — from experiment tracking to a full Kubernetes ML platform.*
+Source: chocolate sales transaction file (Jan 3 – Aug 31, 2022). Data is anonymized but realistic — the rep names, countries, and product SKUs are the originals from the upstream dataset. Total revenue $6,183,625 across 177,007 boxes shipped.
