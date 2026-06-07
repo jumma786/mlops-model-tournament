@@ -151,7 +151,7 @@ def generate_comparison_report(results: dict, champion: str, save_path: str) -> 
 </html>"""
 
     path = os.path.join(save_path, "tournament_report.html")
-    with open(path, "w") as f:
+    with open(path, "w", encoding="utf-8") as f:
         f.write(html)
     logger.info(f"HTML report saved: {path}")
     return path
