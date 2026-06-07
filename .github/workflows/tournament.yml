@@ -1,0 +1,94 @@
+name: MLOps Tournament CI/CD
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main]
+  schedule:
+    - cron: "0 6 * * 1"   # Weekly Monday 06:00 UTC — retrain on schedule
+
+jobs:
+  test:
+    name: Unit Tests
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run tests with coverage
+        run: pytest tests/ -v --cov=src --cov-report=xml --cov-report=term-missing
+
+      - name: Upload coverage report
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report
+          path: coverage.xml
+
+  tournament:
+    name: Run Model Tournament
+    runs-on: ubuntu-latest
+    needs: test   # Only run if tests pass
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run tournament
+        run: |
+          python src/tournament.py \
+            --n-samples 5000 \
+            --experiment-name "bank-marketing-ci" \
+            --min-auc 0.70
+
+      - name: Upload reports
+        uses: actions/upload-artifact@v4
+        with:
+          name: tournament-reports
+          path: reports/
+          retention-days: 30
+
+      - name: Upload MLflow runs
+        uses: actions/upload-artifact@v4
+        with:
+          name: mlflow-runs
+          path: mlruns/
+          retention-days: 30
+
+      - name: Check champion AUC gate
+        run: |
+          python - <<'EOF'
+          import os, glob, json
+
+          # Find the latest MLflow run metrics
+          metric_files = glob.glob("mlruns/**/metrics/champion_auc", recursive=True)
+          if metric_files:
+              with open(sorted(metric_files)[-1]) as f:
+                  content = f.read().strip().split()
+                  auc = float(content[1])
+              print(f"Champion AUC: {auc:.4f}")
+              if auc < 0.70:
+                  print(f"❌ AUC {auc:.4f} below threshold 0.70 — pipeline FAILED")
+                  exit(1)
+              else:
+                  print(f"✅ AUC {auc:.4f} meets threshold — pipeline PASSED")
+          else:
+              print("No metric files found — skipping gate check")
+          EOF
