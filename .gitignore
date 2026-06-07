@@ -5,8 +5,6 @@ __pycache__/
 .coverage
 coverage.xml
 mlruns/
-reports/*.png
-reports/*.html
 data/*.csv
 data/*.zip
 .env
