@@ -6,7 +6,7 @@
 ![Dataset](https://img.shields.io/badge/Dataset-UCI%20Bank%20Marketing-green)
 ![License](https://img.shields.io/badge/License-MIT-lightgrey)
 
-> **Part of the MLOps Portfolio Series** — Project 1 of 10  
+> **Part of the [MLOps Portfolio Series](https://github.com/jumma786/mlops-portfolio)** — Project 1 of 10  
 > A production-grade multi-model tournament pipeline that automatically trains, evaluates, and promotes the best ML model using MLflow experiment tracking and GitHub Actions CI/CD.
 
 ---
